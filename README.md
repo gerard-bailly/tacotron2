@@ -8,16 +8,26 @@ PyTorch implementation of Tacotron 2 with several (optional) extensions:
 6. Yaml configuration file
   
 ## Pre-processing target files
-1. Mel-spectrograms, frames of action units should be stored and will be generated in the following format:
+### Mel-spectrograms, frames of action units should be stored and will be generated in the following format:
+   
   a. Header with 4 int32 values: (nb-of-frames, nb-parameters; numerator of sampling frequency; denominator of sampling frequency); Note that waveglow samples spectrograms of 22050 Hz audio signals at 22050/256=86.1328125 Hz
+  
   b. Followed by nb-of-frames frames of nb-parameters float32 values
-  c. Naming recommendations: <author>_<book>_<reader>_<style>_<volume>_<chapter>.<parameter_name>.
+  
+  c. Naming recommendations: <author>_<book>_<reader>_<style>_<volume>_<chapter>.<parameter_name>
+  
   d. Note that <reader>, <style> and <parameter_name> are used in the Yaml configuration file to automatically select the appropriate items in the lists of keys 'speakers', 'styles' and 'ext_data'
-3. A .csv file describing utterances. Each line contains fields separated by "|".
+  
+### A .csv file describing utterances. Each line contains fields separated by "|"
+   
   a. They should contain at least 4 fields: <target_file>|<start ms>|<end ms>|<text or input phones separated by spaces in {}>
+
   b. An additional field may specify aligned output phones separated by spaces
+  
   c. The key 'lgs_sil_add' in the Yaml configuration file specifies how many seconds of ambient silence (typically 0.1s) are added before <start ms> and <end ms>. Input text entries should "explain" these silences: we recommend to begin and end utterances produced in isolation with the end-of-chapter symbol "§", otherwise to start the current utterance with the final punctuation of the previous utterance.
-4. Language-specific lists of text characters, input phones & output phones are specified in def_symbols.py respectively by _specific_characters, valid_symbols & valid_alignments
+
+### Language-specific lists of text characters, input phones & output phones are specified in def_symbols.py respectively by _specific_characters, valid_symbols & valid_alignments
+   
   a. Language is selected in the Yaml configuration file via the key 'language'
 
 ## Training
@@ -25,6 +35,7 @@ PyTorch implementation of Tacotron 2 with several (optional) extensions:
 
 ## Inference/synthesis
 1. python3 do_syn.py --output_directory <...> --vocoder=waveglow_NEB.pt --tacotron tacotron2_FR -e '' --config tc2.yaml --hparams "{nm_csv_test: '<...>.csv'}"
+   
   a. The list of supported neural vocoders are listed in the key 'vocoder' in the Yaml configuration file: for now, 'waveglow' and 'hifigan' are supported
 
 ## Related repos
