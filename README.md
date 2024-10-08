@@ -26,11 +26,11 @@ PyTorch implementation of Tacotron 2 with several (optional) extensions:
   
   c. The key 'lgs_sil_add' in the Yaml configuration file specifies how many seconds of ambient silence (typically 0.1s) are added before <start ms> and <end ms>. Input text entries should "explain" these silences: we recommend to begin and end utterances produced in isolation with the end-of-chapter symbol "§", otherwise to start the current utterance with the final punctuation of the previous utterance.
 
-  d. Examples could be found:
+  d. Examples could be found at:
 
-    - for French in [https://zenodo.org/records/7560290](https://zenodo.org/records/7560290/files/AD_train.csv)
+[https://zenodo.org/records/7560290](https://zenodo.org/records/7560290/files/AD_train.csv) for French
 
-    - for Italian in [https://zenodo.org/records/13899343](https://zenodo.org/records/13899343/files/IT.csv)
+[https://zenodo.org/records/13899343](https://zenodo.org/records/13899343/files/IT.csv) for Italian
 
 3. Language-specific lists of text characters, input phones & output phones are specified in def_symbols.py respectively by _specific_characters, valid_symbols & valid_alignments
    
