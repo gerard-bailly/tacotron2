@@ -29,4 +29,5 @@ PyTorch implementation of Tacotron 2 with several (optional) extensions:
 
 ## Related repos
 [WaveGlow](https://github.com/NVIDIA/WaveGlow) Faster than real time Flow-based Generative Network for Speech Synthesis
+
 [HiFi_GAN](https://github.com/jik876/hifi-gan) GAN-based model capable of generating high fidelity speech efficiently
