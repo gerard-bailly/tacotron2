@@ -1,0 +1,7 @@
+loc=RO;
+cd ..; ls _wav_22050/DIVERS*${loc}*.wav _wav_22050/JV_VMM*${loc}*.wav > waveglow/test_files.txt; cd waveglow
+python3 mel2samp.py -f test_files.txt -o . -c config.json
+ls *.pt > mel_files.txt
+python3 inference.py -f mel_files.txt -w ../waveglow_${loc}.pt -o . --is_fp16 -s 0.6
+
+nohup python3 train.py -c config.json >& trace&
