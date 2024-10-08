@@ -8,7 +8,7 @@ PyTorch implementation of Tacotron 2 with several (optional) extensions:
 6. Yaml configuration file
   
 ## Pre-processing target files
-### Mel-spectrograms, frames of action units should be stored and will be generated in the following format:
+1. Mel-spectrograms, frames of action units should be stored and will be generated in the following format:
    
   a. Header with 4 int32 values: (nb-of-frames, nb-parameters; numerator of sampling frequency; denominator of sampling frequency); Note that waveglow samples spectrograms of 22050 Hz audio signals at 22050/256=86.1328125 Hz
   
@@ -18,7 +18,7 @@ PyTorch implementation of Tacotron 2 with several (optional) extensions:
   
   d. Note that <reader>, <style> and <parameter_name> are used in the Yaml configuration file to automatically select the appropriate items in the lists of keys 'speakers', 'styles' and 'ext_data'
   
-### A .csv file describing utterances. Each line contains fields separated by "|"
+2. A .csv file describing utterances. Each line contains fields separated by "|"
    
   a. They should contain at least 4 fields: <target_file>|<start ms>|<end ms>|<text or input phones separated by spaces in {}>
 
@@ -26,7 +26,13 @@ PyTorch implementation of Tacotron 2 with several (optional) extensions:
   
   c. The key 'lgs_sil_add' in the Yaml configuration file specifies how many seconds of ambient silence (typically 0.1s) are added before <start ms> and <end ms>. Input text entries should "explain" these silences: we recommend to begin and end utterances produced in isolation with the end-of-chapter symbol "§", otherwise to start the current utterance with the final punctuation of the previous utterance.
 
-### Language-specific lists of text characters, input phones & output phones are specified in def_symbols.py respectively by _specific_characters, valid_symbols & valid_alignments
+  d. Examples could be found:
+
+    - for French in [https://zenodo.org/records/7560290](https://zenodo.org/records/7560290/files/AD_train.csv)
+
+    - for Italian in [https://zenodo.org/records/13899343](https://zenodo.org/records/13899343/files/IT.csv)
+
+3. Language-specific lists of text characters, input phones & output phones are specified in def_symbols.py respectively by _specific_characters, valid_symbols & valid_alignments
    
   a. Language is selected in the Yaml configuration file via the key 'language'
 
