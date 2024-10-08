@@ -5,7 +5,8 @@ PyTorch implementation of Tacotron 2 with several (optional) extensions:
 3. Phonetic predictor
 4. Speaker & style embeddings
 5. Pre-processed target files with direct access (avoid spliting audiobooks in thousands of utterances)
-6. Yaml configuration file
+6. Yaml configuration file. Examples could be found at: 
+[https://zenodo.org/records/13899343](https://zenodo.org/api/records/13903361/draft/files/tc2.yaml) for Italian and [https://zenodo.org/records/7560290](https://zenodo.org/api/records/13903548/draft/files/tc2.yaml) for French
   
 ## Pre-processing target files
 1. Mel-spectrograms, frames of action units should be stored and will be generated in the following format:
@@ -25,7 +26,8 @@ PyTorch implementation of Tacotron 2 with several (optional) extensions:
   - Language is selected in the Yaml configuration file via the key 'language'
 
 ## Training
-1. python3 do_train.py --output_directory <...> -c tacotron2_FR --config tc2.yaml --hparams "{factor_pho: 1.00, nb_epochs: 10, learning_rate: 0.0002, batch_size: 40, nm_csv_train: '<...>.csv', lgs_max: 10}"
+1. python3 do_train.py --output_directory <...> -c tacotron2_* --config tc2.yaml --hparams "{factor_pho: 1.00, nb_epochs: 10, learning_rate: 0.0002, batch_size: 40, nm_csv_train: '<...>.csv', lgs_max: 10}"
+2. Pre-trained models can be found at [https://zenodo.org/records/13899343](https://zenodo.org/api/records/13903361/draft/files/tacotron2_IT+PHO) for Italian and [https://zenodo.org/records/7560290](https://zenodo.org/api/records/13903548/draft/files/tacotron2_ALL) for French
 
 ## Inference/synthesis
 1. python3 do_syn.py --output_directory <...> --vocoder=waveglow_NEB.pt --tacotron tacotron2_FR -e '' --config tc2.yaml --hparams "{nm_csv_test: '<...>.csv'}"
