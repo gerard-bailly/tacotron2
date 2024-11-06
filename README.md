@@ -5,7 +5,9 @@ PyTorch implementation of Tacotron 2 with several (optional) extensions:
 3. Phonetic predictor
 4. Speaker & style embeddings
 5. Pre-processed target files with direct access (avoid spliting audiobooks in thousands of utterances)
-6. Yaml configuration file. Examples could be found at: 
+6. Reference encoder
+7. Freezing layers
+8. Yaml configuration file. Examples could be found at: 
 [https://zenodo.org/records/13899343](https://zenodo.org/api/records/13903361/draft/files/tc2.yaml) for Italian and [https://zenodo.org/records/7560290](https://zenodo.org/api/records/13903548/draft/files/tc2.yaml) for French
   
 ## Pre-processing target files
