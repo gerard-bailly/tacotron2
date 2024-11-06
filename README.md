@@ -9,7 +9,7 @@ PyTorch implementation of Tacotron 2 with several (optional) extensions:
 [https://zenodo.org/records/13899343](https://zenodo.org/api/records/13903361/draft/files/tc2.yaml) for Italian and [https://zenodo.org/records/7560290](https://zenodo.org/api/records/13903548/draft/files/tc2.yaml) for French
   
 ## Pre-processing target files
-1. Mel-spectrograms, frames of action units should be stored and will be generated in the following format:
+1. Frames (Mel-spectrograms, action units...) should be stored and will be generated in the following format:
   - Header with 4 int32 values: (nb-of-frames, nb-parameters; numerator of sampling frequency; denominator of sampling frequency); Note that waveglow samples spectrograms of 22050 Hz audio signals at 22050/256=86.1328125 Hz
   - Followed by nb-of-frames frames of nb-parameters float32 values
   - Naming recommendations: <author>_<book>_<reader>_<style>_<volume>_<chapter>.<parameter_name>
@@ -29,9 +29,14 @@ PyTorch implementation of Tacotron 2 with several (optional) extensions:
 1. python3 do_train.py --output_directory <...> -c tacotron2_* --config tc2.yaml --hparams "{factor_pho: 1.00, nb_epochs: 10, learning_rate: 0.0002, batch_size: 40, nm_csv_train: '<...>.csv', lgs_max: 10}"
 2. Pre-trained models can be found at [https://zenodo.org/records/13899343](https://zenodo.org/api/records/13903361/draft/files/tacotron2_IT+PHO) for Italian and [https://zenodo.org/records/7560290](https://zenodo.org/api/records/13903548/draft/files/tacotron2_ALL) for French
 
-## Inference/synthesis
+## Batch inference/synthesis
 1. python3 do_syn.py --output_directory <...> --vocoder=waveglow_NEB.pt --tacotron tacotron2_FR -e '' --config tc2.yaml --hparams "{nm_csv_test: '<...>.csv'}"
   - The list of supported neural vocoders are listed in the key 'vocoder' in the Yaml configuration file: for now, 'waveglow' and 'hifigan' are supported
+
+## On-line Inference/synthesis
+1. python3 do_tts.py --silent --no_auto_numbering --play_wav --speaker <spk>  %% On-line TTS with config tc2.yaml, play, speaker <spk> and WAVEGLOW vocoder by default
+Your input>> ...
+  - to use HIFIGAN: -v hifigan/generator_universal.pth.tar
 
 ## Related repos
 [WaveGlow](https://github.com/NVIDIA/WaveGlow) Faster than real time Flow-based Generative Network for Speech Synthesis
