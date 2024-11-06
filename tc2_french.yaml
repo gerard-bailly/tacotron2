@@ -1,0 +1,107 @@
+seed: 1234
+fp16_run: False
+distributed_run: False
+dist_backend: "nccl"
+dist_url: "tcp://localhost:54321"
+cudnn_enabled: True
+cudnn_benchmark: False
+ignore_layers: ['']
+
+language: 'french'
+
+# 2 targets
+dir_data: ['WAVEGLOW','AU_60']
+ext_data: ['WAVEGLOW','AU']
+dim_data: [80,37]
+fe_data: [86.1328125,60.0]
+use_postnet: [True,False]
+
+lgs_sil_add: 0.1
+nm_csv_train: 'ALL.csv'
+nm_csv_test: '/dev/null'
+lgs_max: 20.0
+
+# list of speakers, NEB by default
+nb_speakers: 13
+speakers: ['NEB','DG','RO','IZ','AD','MLB','YB','AA','TH','JLF','PL','PB', 'EZWA']
+
+nb_styles: 13
+styles: ['NARRATION','COLERE','DESOLE','DETERMINE','ENTHOUSIASTE','ESPIEGLE','ETONNE','EVIDENCE','INCREDULE','PENSIF','RECONFORTANT','SUPPLIANT','NIV2']
+
+################################
+# Model Parameters             #
+################################
+symbols_embedding_dim: 512
+
+# Prosody embedding parameters
+prosody_n_convolutions: 6
+prosody_conv_dim_in: [1, 32, 32, 64, 64, 128]
+prosody_conv_dim_out: [32, 32, 64, 64, 128, 128]
+prosody_conv_kernel: 3
+prosody_conv_stride: [1, 1, 2, 2, 2, 2]
+
+prosody_embedding_dim: 128
+
+# Style encoder parameters
+bias_encoder_with_hc: False
+bias_encoder_with_entry: True
+nb_style_parameters: 0
+style_parameters: [0,0,0,0,0,0,0,0]
+use_style_input: False
+style_embedding_dim: 512
+
+# Text encoder parameters
+encoder_kernel_size: 5
+encoder_n_convolutions: 3
+encoder_embedding_dim: 512
+encoder_lstm_hidden_dim: 256
+p_encoder_dropout: 0.2
+
+# Decoder parameters
+n_frames_per_step: [2,1]
+decoder_rnn_dim: [1024,256]
+prenet_dim: [256,64]
+gate_threshold: [0.5,0.5]
+p_prenet_dropout: [0.5,0.5]
+p_postnet_dropout: [0.5,0.5]
+p_attention_dropout: [0.1,0.1]
+p_decoder_dropout: [0.1,0.1]
+p_teacher_forcing: [1.0,1.0]
+
+#phonetic ouput
+factor_pho: 1.00
+
+#duration ouput
+compute_durations: False
+factor_dur: 1.00
+
+# Attention parameters
+attention_rnn_dim: [1024,1024]
+attention_dim: [128,128]
+
+# Location Layer parameters
+attention_location_n_filters: [32,32]
+attention_location_kernel_size: [31,31]
+
+# post processing network parameters
+postnet_embedding_dim: [512,512]
+postnet_kernel_size: [5,5]
+postnet_n_convolutions: [5,5]
+
+################################
+# Optimization Hyperparameters #
+################################
+factor_gate: [1.0,1.0]
+use_saved_learning_rate: True
+learning_rate: !!float 1e-4
+milestones: [10, 20, 50]
+step_size: 100
+gamma: 0.1 #learning_rate multiplied by gamma at each step_size
+momentum: 0.5
+weight_decay: !!float 1e-6
+grad_clip_thresh: 1.0
+batch_size: 32
+nb_epochs: 10
+mask_padding: True  # set model's padded outputs to padded values
+output_alignments: False
+
