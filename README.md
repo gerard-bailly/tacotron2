@@ -8,7 +8,7 @@ PyTorch implementation of Tacotron 2 with several (optional) extensions:
 6. Reference encoder
 7. Freezing layers
 8. Yaml configuration file. Examples could be found at: 
-[https://zenodo.org/records/13899343](https://zenodo.org/api/records/13903361/draft/files/tc2.yaml) for Italian and [https://zenodo.org/records/7560290](https://zenodo.org/api/records/13903548/draft/files/tc2.yaml) for French
+[https://zenodo.org/records/14893481](https://zenodo.org/records/14893481/files/tc2_italian.yaml?download=1) for Italian and [https://zenodo.org/records/7560290](https://zenodo.org/api/records/13903548/draft/files/tc2.yaml) for French
   
 ## Pre-processing target files
 1. Frames (Mel-spectrograms, action units...) should be stored and will be generated in the following format:
@@ -22,7 +22,7 @@ PyTorch implementation of Tacotron 2 with several (optional) extensions:
   - The key 'lgs_sil_add' in the Yaml configuration file specifies how many seconds of ambient silence (typically 0.1s) are added before <start ms> and <end ms>. Input text entries should "explain" these silences: we recommend to begin and end utterances produced in isolation with the end-of-chapter symbol "§", otherwise to start the current utterance with the final punctuation of the previous utterance.
   - Examples could be found at: 
 [https://zenodo.org/records/7560290](https://zenodo.org/records/7560290/files/AD_train.csv?download=1) for French and 
-[https://zenodo.org/records/14893481](https://zenodo.org/records/14893481/files/tc2_italian.yaml?download=1) for Italian
+[https://zenodo.org/records/14893481](https://zenodo.org/records/14893481/files/IT.csv?download=1) for Italian
 
 3. Language-specific lists of text characters, input phones & output phones are specified in def_symbols.py respectively by _specific_characters, valid_symbols & valid_alignments
   - Language is selected in the Yaml configuration file via the key 'language'
