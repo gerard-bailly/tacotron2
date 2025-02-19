@@ -29,7 +29,7 @@ PyTorch implementation of Tacotron 2 with several (optional) extensions:
 
 ## Training
 1. python3 do_train.py --output_directory <...> -c tacotron2_* --config tc2.yaml --hparams "{factor_pho: 1.00, nb_epochs: 10, learning_rate: 0.0002, batch_size: 40, nm_csv_train: '<...>.csv', lgs_max: 10}"
-2. Pre-trained models can be found at [https://zenodo.org/records/13899343](https://zenodo.org/api/records/13903361/draft/files/tacotron2_IT+PHO) for Italian and [https://zenodo.org/records/7560290](https://zenodo.org/api/records/13903548/draft/files/tacotron2_ALL) for French
+2. Pre-trained models can be found at [https://zenodo.org/records/14893481](https://zenodo.org/records/14893481/files/tacotron2_IT?download=1) for Italian and [https://zenodo.org/records/7560290](https://zenodo.org/api/records/13903548/files/tacotron2_ALL?download=1) for French
 
 ## Batch inference/synthesis
 1. python3 do_syn.py --output_directory <...> --vocoder=waveglow_NEB.pt --tacotron tacotron2_FR -e '' --config tc2.yaml --hparams "{nm_csv_test: '<...>.csv'}"
