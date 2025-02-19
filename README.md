@@ -21,15 +21,15 @@ PyTorch implementation of Tacotron 2 with several (optional) extensions:
   -An additional field may specify aligned output phones separated by spaces
   - The key 'lgs_sil_add' in the Yaml configuration file specifies how many seconds of ambient silence (typically 0.1s) are added before <start ms> and <end ms>. Input text entries should "explain" these silences: we recommend to begin and end utterances produced in isolation with the end-of-chapter symbol "§", otherwise to start the current utterance with the final punctuation of the previous utterance.
   - Examples could be found at: 
-[https://zenodo.org/records/7560290](https://zenodo.org/records/7560290/files/AD_train.csv) for French and 
-[https://zenodo.org/records/13899343](https://zenodo.org/records/13899343/files/IT.csv) for Italian
+[https://zenodo.org/records/7560290](https://zenodo.org/records/7560290/files/AD_train.csv?download=1) for French and 
+[https://zenodo.org/records/14893481](https://zenodo.org/records/14893481/files/tc2_italian.yaml?download=1) for Italian
 
 3. Language-specific lists of text characters, input phones & output phones are specified in def_symbols.py respectively by _specific_characters, valid_symbols & valid_alignments
   - Language is selected in the Yaml configuration file via the key 'language'
 
 ## Training
 1. python3 do_train.py --output_directory <...> -c tacotron2_* --config tc2.yaml --hparams "{factor_pho: 1.00, nb_epochs: 10, learning_rate: 0.0002, batch_size: 40, nm_csv_train: '<...>.csv', lgs_max: 10}"
-2. Pre-trained models can be found at [https://zenodo.org/records/14893481](https://zenodo.org/records/14893481/files/tacotron2_IT?download=1) for Italian and [https://zenodo.org/records/7560290](https://zenodo.org/api/records/13903548/files/tacotron2_ALL?download=1) for French
+2. Pre-trained models can be found at [https://zenodo.org/records/14893481](https://zenodo.org/records/14893481/files/tacotron2_IT?download=1) for Italian and [https://zenodo.org/records/7560290](https://zenodo.org/records/13903548/files/tacotron2_ALL?download=1) for French
 
 ## Batch inference/synthesis
 1. python3 do_syn.py --output_directory <...> --vocoder=waveglow_NEB.pt --tacotron tacotron2_FR -e '' --config tc2.yaml --hparams "{nm_csv_test: '<...>.csv'}"
