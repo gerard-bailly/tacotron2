@@ -22,8 +22,8 @@ nm_csv_test: '/dev/null'
 lgs_max: 20.0
 
 # list of speakers, LC by default
-nb_speakers: 3
-speakers: ['LC', 'EG', 'MT']
+nb_speakers: 33
+speakers: ['LC', 'EG', 'MT', 'FG', 'RF', 'MR', 'RC', 'SB', 'FA', 'DA', 'NI', 'RECL', 'STRALF', 'PAOLO', 'SP', 'MM', 'PIER', 'ANGE', 'LAURA', 'AB', 'GIOEMILY', 'SIRJOE', 'CAPI', 'ALLIE', 'KIUKKO', 'CAIMMA', 'DOLCINEA', 'AZ', 'BM', 'ML', 'MGT', 'FR', 'PETULA']
 
 nb_styles: 0
 styles: []
@@ -43,9 +43,8 @@ prosody_conv_stride: [1, 1, 2, 2, 1, 1]
 prosody_embedding_dim: 32
 
 # Style encoder parameters
-bias_encoder_with_hc: False
 bias_encoder_with_entry: True # add to every output of the text encoder  
-nb_style_parameters: 10
+nb_style_parameters: 0
 style_parameters: [0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0]
 use_style_input: False
 style_embedding_dim: 128
