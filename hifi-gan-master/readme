@@ -1,0 +1,7 @@
+for f in `ls ../_syn_WAVEGLOW/*org.wav`; do
+nm="${f##*/}"; nm="${nm%%_org.*}";
+ln -f -s ../$f wavs/$nm.wav
+ln -f -s ../../_syn_WAVEGLOW/${nm}_prd.WAVEGLOW mels/$nm.mel
+done
+
+nohup python3 train.py --fine_tuning True --config config_v1.json --input_wavs_dir wavs --input_mels_dir mels --input_training_file train.csv --input_validation_file validation.csv >& trace_finetuning_$(date +'%Y_%m_%d') &
