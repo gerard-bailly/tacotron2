@@ -55,7 +55,7 @@ def load_csv(nm_csv, hps, utts=[], nms_data=[], split="|", sort_utt=True, check_
                             if t[0]=='STYLE' and t[1] in hps['styles']: i_style=hps['styles'].index(t[1])                  
                 txt=re.sub(r'’','\'',txt);
                 txt=re.sub(r'œ','oe',txt);
-                text_norm = np.array(text_to_sequence(txt)).astype(np.int16)
+                text_norm = np.array(text_to_sequence(hps,txt)).astype(np.int16)
                 # ch='|'.join([hps['symbols'][p] for p in text_norm]); print(ch);
 
                 if nb_fields>i_txt+1: # phonetic alignments of input symbols

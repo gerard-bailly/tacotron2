@@ -1,4 +1,5 @@
 import re
+from num2words import num2words
 
 def init_symbols(hps):
 	global _symbol_to_id, _id_to_symbol, symbols, out_symbols, _out_symbol_to_id
@@ -11,7 +12,8 @@ def init_symbols(hps):
 			valid_alignments = [
 				'_','a','a&i','a&j','a~','b','b&q','d','d&q','d&z','d&z^','e','e^','e~','f','f&q','g','g&q','g&z','h','i','j','j&i',
 				'j&u','j&q','i&j','k','k&q','k&s','k&s&q','l','l&q','m','m&q','n','n&q','ng','o','o^','o~','p','q','r',
-				'r&w','r&q','s','s&q','s^','t','t&q','t&s','t&s^','u','v','w','w&a','x','x^','x~','y','z','z&q','z^','n~','__','p&q','s^&q'
+				'r&w','r&q','s','s&q','s^','t','t&q','t&s','t&s^','u','v','w','w&a','x','x^','x~','y','z','z&q','z^','n~','__','p&q','s^&q',
+				'a&__','u&__','a~&__','i&__','e^&__','y&__','e&__','x~&__','r&__','o~&__','s&__','l&__','o&__','x^&__','e~&__','o^&__'
 			]
 			_specific_characters = '[]§«»ÀÂÇÉÈÊÎÔÖàâæçèéêëîïôöùûü¬~"' # GB: new symbols for turntaking & ldots, [] are for notes, " for new terms.
 	elif hps['language']=='italian':
@@ -24,8 +26,17 @@ def init_symbols(hps):
 				'ts:', 'ts^:', 'dz:', 'dz^:'
 			]
 			valid_alignments = valid_symbols + ['a&i', 'y', '__', '_'];
-			_specific_characters = '—[]§«»ÀÂÇÈÉÊÎÔàáâæçèéêëìîïòóôùûü¬~"íúÌ'
-#			_specific_characters = '—[]§«»ÀÂÇÈÉÊÎÔÔàáâæçèéêëìîïòóôöùûü¬~"íúÌ' # GB: new symbols for turntaking & ldots, [] are for notes, " for new terms.
+			_specific_characters = '—[]§«»ÀÂÇÈÉÊÎÔàáâæçèéêëìîïòóôùûü~"íúÌÒ'
+#			_specific_characters = '—[]§«»ÀÂÇÈÉÊÎÔÔàáâæçèéêëìîïòóôöùûü~"íúÌÒ' # GB: new symbols for turntaking & ldots, [] are for notes, " for new terms.
+	elif hps['language']=='bildts':
+			valid_symbols = [
+				'a', 'e', 'e^', 'i', 'o', 'u', 'I', 'X', 'O', 'A', 'y', 'x', 'q',
+				'a:', 'e:', 'e^:', 'i:', 'o:', 'u:', 'I:', 'X:',  'O:', 'A:', 'y:', 'q:', 
+				'p', 't', 'k', 'b', 'd', 'g', 'f', 's',  'v', 'z', 'r', 'r:', 'l', 'm' , 'n', 'ng', 'w', 'j',
+				'G', 'N', 'R', 'h'
+			]
+			valid_alignments = valid_symbols + ['I&q', 'i&q', 'o&q', 'O&q', 'y&q', 'm&q', 'x&q', 'l&q', 'A&i', '__', '_'];
+			_specific_characters = '—[]§«»ÀÂöÈÉÊÎÔàáâ/äèéêëìîïòóôùûü~"íúÌÒ'
 	elif hps['language']=='english':
 			valid_symbols = [
 				'AA0', 'AA1', 'AA2', 'AE0', 'AE1', 'AE2', 'AH0', 'AH1', 'AH2', 'AW0', 'AW1', 'AW2', 'AX0', 'AY0', 'AY1', 'AY2', 'B',
@@ -40,8 +51,7 @@ def init_symbols(hps):
 				'Y&EH1', 'Y&ER1', 'Y&IY0', 'Y&OO1', 'Y&UA0', 'Y&UA1', 'Y&UA2', 'Y&UH0', 'Y&UH1', 'Y&UH2', 'Y&UU0', 'Y&UU1', 'Y&UU2',
                                 'Y&UW0', 'AX0&D', 'AX0&V', 'AX0&Z', 'R&AX0', 'AA1&R', 'UW1', 'UW2', 'T&II1', 'AX0&S', 'Y&OO0', 'K&AX0', 'N&AX0', 'EH1&M', 'AX2&L', 'EH2&Z', 'Y&ER2'
 			]
-			_specific_characters = '[]§«»¬~"'
-			
+			_specific_characters = '[]§«»¬~"'	
 	_tokens = '01' # ML: Start of Sequence <SoS> and and of Sequence <EoS> tokens
 	_pad        = '_'
 	_punctuation = '!\'(),.:;? '
@@ -52,7 +62,7 @@ def init_symbols(hps):
 	_arpabet = ['@' + s for s in valid_symbols]
 
 	# Export all symbols:
-	symbols = [_pad] + list(_special) + list(_punctuation) + list(_letters) + list(_specific_characters) + _arpabet + list(_tokens) + ['#'] # GB: mark for emphasis
+	symbols = [_pad] + list(_special) + list(_punctuation) + list(_letters) + list(_specific_characters) + _arpabet + list(_tokens) + ['#', '@__'] # GB: mark for emphasis
 	out_symbols = valid_alignments
 
 	_symbol_to_id = {s: i for i, s in enumerate(symbols)}
@@ -96,10 +106,25 @@ def sequence_to_text(sequence):
       result += s
   return result.replace('}{', ' ')
   
-def text_to_sequence(text):
-	ind=[(m.start(0), m.end(0)) for m in re.finditer('\{([^\}]+?)\}',text)] # check for curly
+def text_to_sequence(hps,text):
+	ind=[(m.start(0), m.end(0)) for m in re.finditer('\d+',text)]
 	if len(ind):
-		deb=0; seq=[]
+		deb=0; seq=''
+		for i,v in enumerate(ind): seq += text[deb:ind[i][0]]; seq += num2words(int(text[ind[i][0]:ind[i][1]]),lang=hps['language']); deb = v[1]
+		seq += text[deb:];
+		text = seq
+	if hps['language']=='french':
+		text = re.sub(r'k([mlg]s+)',r'kilo=\1',text)
+		text = re.sub(r'c([mlg]s+)',r'centi=\1',text)
+		text = re.sub(r'm([mlg]s+)',r'milli=\1',text)
+		text = re.sub(r'=ms+',r'mètres',text)
+		text = re.sub(r'=gs+',r'grammes',text)
+		text = re.sub(r'=ls+',r'litres',text)
+
+#	text=re.sub(r"'([^']+)'",r"_\1_",text)
+	ind=[(m.start(0), m.end(0)) for m in re.finditer('{([^\}]+?)}',text)] # check for curly
+	if len(ind):
+		deb=0; seq = []
 		for i,v in enumerate(ind):
 			seq += _symbols_to_sequence([*text[deb:ind[i][0]]]) # text
 			seq += _arpabet_to_sequence(text[v[0]+1:v[1]-1]) # phones

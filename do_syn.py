@@ -12,6 +12,9 @@ MAX_WAV_VALUE = 32768.0
 import gc
 import yaml
 import json
+import struct
+import time
+from struct import unpack
 
 from load_csv import load_csv
 from def_symbols import init_symbols, text_to_sequence
@@ -25,9 +28,10 @@ from matplotlib.ticker import (MultipleLocator, FormatStrFormatter, AutoMinorLoc
 import scipy.interpolate as interpolate
 
 hps = []
+lang = ''
 exe = '/research/crissp/LPCNet-master/lpcnet_demo_NEB -synthesis'
-spk_imposed=-1; spk_in=0;
-style_imposed=-1; style_in=0;
+spk_imposed=-1
+style_imposed=-1
 
 def check_gpu(msg):
     mo=pow(1024.0,2)
@@ -71,13 +75,13 @@ parser.add_argument('--draw', required=False, action='store_true', default=False
 parser.add_argument('--overwrite', required=False, action='store_true', default=False, help='no overwrite')
 parser.add_argument('-g', '--ground_truth', required=False, action='store_true', default=False, help='generate ground-truth parameter files')
 parser.add_argument('--parameter_files', required=False, action='store_true', default=False, help='generate parameter files')
-parser.add_argument('-t', '--tacotron', type=str, default='tacotron2_IT+PHO', required=False, help='Tacotron model')
+parser.add_argument('-t', '--tacotron', type=str, default='tacotron2_NEB_WAVEGLOW.10decembre2020', required=False, help='Tacotron model')
+parser.add_argument('--save_embeddings', type=str, required=False, default='', help='Save ouput embeddings of text-encoder in .mat file')
 parser.add_argument('-v', '--vocoder', type=str, default='waveglow_NEB.pt', required=False, help='Vocoder model')
-parser.add_argument('--speaker', type=str, default='MT', required=False, help='speaker')
+parser.add_argument('--speaker', type=str, default='NONE', required=False, help='speaker')
 parser.add_argument('--style', type=str, default='NONE', required=False, help='style')
 parser.add_argument('-r', '--sampling_rate', type=int, default='22050', required=False, help='sampling rate')
-#parser.add_argument('-e', '--exe', type=str, default='/research/crissp/LPCNet-master/lpcnet_demo_DG -synthesis', required=True, help='vocoder exe')
-parser.add_argument('-e', '--exe', type=str, default='', required=False, help='vocoder exe')
+parser.add_argument('-e', '--exe', type=str, default='/research/crissp/LPCNet-master/lpcnet_demo_DG -synthesis', required=True, help='vocoder')
 parser.add_argument('--hparams', type=str, required=False, help='comma separated name:value pairs')
 parser.add_argument('--phonetic_only', action='store_true', default=False, help='output only phonetic predictions')
 parser.add_argument('--silent', action='store_true', default=False, help='run silently')
@@ -85,21 +89,21 @@ parser.add_argument('--stateful', action='store_true', default=False, help='save
 args = parser.parse_args()
 
 hps = yaml.load(open(args.config, "r"), Loader=yaml.FullLoader)
-hps['save_embeddings']=''
-hps['stateful'] = args.stateful
-
 hparams = args.hparams
 if hparams: hps.update(yaml.safe_load(hparams))
+lang = hps['language']
 init_symbols(hps)
-hps['batch_size']=1;
-hps['code_PAR']=code_PAR=text_to_sequence('§')[0] # symbol for text spliting
-code_POINT=text_to_sequence('.')[0] # symbol for end of utterance... to be replaced by end of paragraph at the end of each entry
-code_SILENT=0
 
+hps['code_PAR']=code_PAR=text_to_sequence(hps,'§')[0] # symbol for text spliting
+code_POINT=text_to_sequence(hps,'.')[0] # symbol for end of utterance... to be replaced by end of paragraph at the end of each entry
+code_SILENT=0
+hps['stateful'] = args.stateful
 exe = args.exe
+
 spk = args.speaker
 style = args.style
 no_auto_numbering = args.no_auto_numbering
+hps['save_embeddings'] = save_embeddings = args.save_embeddings
 
 play_wav = args.play_wav
 if play_wav:
@@ -126,28 +130,30 @@ if device!="cpu":
 	check_gpu("START")
 
 if spk in hps['speakers']:
-  spk_imposed=hps['speakers'].index(args.speaker);
+  spk_imposed=hps['speakers'].index(spk);
   print('SPK [{}]={}'.format(hps['speakers'],spk_imposed))
 else:
   print('SPK {} not in {}'.format(args.speaker,hps['speakers']))
-if style in hps['styles']:
-  style_imposed=hps['styles'].index(args.style);
-  print('STYLE [{}]={}'.format(hps['styles'],style_imposed))
+
+if hps['nb_styles'] and style in hps['styles']:
+  style_imposed=hps['styles'].index(style);
+  print('STYLE [{}]={}'.format(hps['styles'],spk_imposed))
 else:
-  print('STYLE {} not in {}'.format(args.style,hps['styles']))
+  print('STYLE {} not in {}'.format(args.speaker,hps['speakers']))
 
 if path.exists(vocoder):
 	if vocoder.find('waveglow')>=0:
 		sigma=0.6
 		sys.path.append('waveglow')
-		waveglow = torch.load(vocoder,device)['model']
+		waveglow = torch.load(vocoder,device,weights_only=False)['model']
 		waveglow = waveglow.remove_weightnorm(waveglow)
 		if torch.cuda.is_available() : waveglow.cuda().eval()
+		type_vocoder='WAVEGLOW'
 		print('WAVEGLOW: MODEL {} loaded'.format(vocoder),flush=True);
 	elif vocoder.find('hifigan')>=0:
-		sys.path.append('hifigan')
-		from env import AttrDict
-		from models import Generator
+		sys.path.append('.')
+		from hifigan.models import Generator
+		from hifigan.__init__ import AttrDict
 		with open("hifigan/config.json", "r") as f: config = json.load(f)
 		config = AttrDict(config)
 		hgan = Generator(config)
@@ -159,10 +165,12 @@ if path.exists(vocoder):
 		for param in hgan.parameters(): param.requires_grad=False; param_size+=param.nelement()*param.element_size()
 		for buffer in hgan.buffers(): buffer_size+=buffer.nelement()*buffer.element_size()
 		size_all_mb = (param_size + buffer_size) / 1024**2
+		print('HIFIGAN: MODEL {} : {:.2f} Mo'.format(vocoder,size_all_mb),flush=True);
 		if torch.cuda.is_available() : hgan.to(device)
-		if not silent: print('HIFIGAN: MODEL {} loaded: {:.2f} Mo'.format(vocoder,size_all_mb),flush=True);
+		type_vocoder='HIFIGAN'
 else:
 	print('VOCODER: MODEL {} not found. No synthesis'.format(vocoder),flush=True);
+	type_vocoder='UNKNOWN'
 	vocoder=None
 	#~ import socket
 	#~ import subprocess
@@ -175,8 +183,10 @@ else:
 
 	#~ msg='MODEL:../waveglow_NEB.pt'; s.send(msg.encode('utf-8'))
 	#~ msg=s.recv(1024).decode('utf-8')
+print('{}: MODEL {} loaded'.format(type_vocoder,vocoder),flush=True);
 
 hps['mask_padding']=False # only one file at a time!
+hps['batch_size']=1 # only one file at a time!
 model = Tacotron2(hps).to(device)
 if path.exists(nm_tacotron2):
 	model_dict=torch.load(nm_tacotron2, map_location='cpu')['state_dict']
@@ -203,7 +213,6 @@ else:
 	print('Tacotron2 model "{}" not found'.format(nm_tacotron2))
 	sys.exit()
 check_gpu("AFTER LOADING MODELS")
-
 (data_test, nms_data)=load_csv(hps['nm_csv_test'], hps, sort_utt=False, check_org=False)
 if prediction==False:
 	suffix='syn'
@@ -213,38 +222,69 @@ model.eval()
 torch.set_grad_enabled(False)
 if phonetic_only: hps['dim_data']=[]; model.set_dim_data([]) # only phonetic prediction
 dim_data=hps['dim_data']; fe_data=hps['fe_data']; nb_out=len(dim_data)
+lg_embeddings=nb_embeddings=0
+if "encoder.lstm" in save_embeddings:
+  lg_embeddings += hps['encoder_embedding_dim'];
+  nb_embeddings=sum([item[4] for item in data_test])
+  header=[nb_embeddings,lg_embeddings,0,0]
+  f_embeddings=open(hps['nm_csv_test']+'_EMBEDDINGS','wb')
+  f_embeddings.write(np.asarray(header,dtype=np.int32))
 
 c_prec=code_PAR
-i_syn=0
-nm_base='INPUT'
-while 1:
-	i_syn=i_syn+1;
-	all_text_in=input("Your input>>");
-	if (re.search(r'^[\.§:?!¬;,(§\[]',all_text_in)==None): all_text_in='§'+all_text_in # if no initial punctuation: use of last from previous text
-	if (re.search(r'[\.§:?!¬;,(§\[]$',all_text_in)==None): all_text_in=all_text_in+'.§' # if no final punctuation: end of chapter
+dt_S=dt_tc2=dt_VOC=0.0;
+for i_syn in range(len(data_test)):
+	[i_nm, debs, lgs_org, all_text_in, lg_in, spk_in, style_in]=data_test[i_syn][0:7]
 	if spk_imposed>=0: spk_in=spk_imposed
-	l_tags=re.findall(r'\<([^\>]*)\>\s*',all_text_in); # tags in text
-	if l_tags:
-		all_text_in=re.sub(r'\<([^\>]*)\>\s*','',all_text_in);  #remove tags
-		for tags in l_tags:
-			lt=re.findall(r"(\w+)=([^;]+)",tags);
-			for t in lt:
-				if t[0]=='SPK' and t[1] in hps['speakers']: spk_in=hps['speakers'].index(t[1])
-	all_text_in = np.array(text_to_sequence(all_text_in)); lg_in=len(all_text_in);
-	tensor_spk_in=to_gpu(torch.LongTensor([spk_in])[None, :]) #if hps['nb_speakers'] else []
-	if hps['nb_styles']:
-		if style_imposed>=0: style_in=style_imposed
-		tensor_style_in=to_gpu(torch.LongTensor([style_in])[None, :])
-	else:
-		tensor_style_in=[]; style_in=0
-		
+	tensor_spk_in=to_gpu(torch.LongTensor([spk_in])[None, :])
+	if style_imposed>=0: style_in=style_imposed
+	tensor_style_in=to_gpu(torch.LongTensor([style_in])[None, :])
 	wf_syn, out_par, spe_org = nb_out*[None], nb_out*[None], nb_out*[None]
+	nm_base=nms_data[data_test[i_syn][0]]
 	if not no_auto_numbering: nm_base+='_{:04d}'.format(i_syn)
 	for i_out in range(nb_out):
+		nm='_{}/{}.{}'.format(hps['dir_data'][i_out],nms_data[i_nm],hps['ext_data'][i_out])
+		if path.exists(nm) and (ground_truth or prediction):  # resynthesis of original
+			nbt=round(lgs_org*fe_data[i_out]/hps['n_frames_per_step'][i_out])*hps['n_frames_per_step'][i_out]
+			spe_org[i_out] = np.memmap(nm,offset=16+(int(debs*fe_data[i_out])*hps['dim_data'][i_out]*4),dtype=np.float32,shape=(nbt,dim_data[i_out]))
+			nm_org='_syn_{}/{}_{}'.format(hps['dir_data'][i_out],nm_base,'org')
+			if gen_pf:
+				nm_pf=nm_org+'.'+hps['ext_data'][i_out]
+				fp=open(nm_pf,'wb')
+				if type(hps['fe_data'][i_out]) is int:
+					num=hps['fe_data'][i_out]; den=1;
+				else:
+					(num,den)=(hps['fe_data'][i_out]).as_integer_ratio()
+				fp.write(np.asarray((nbt,dim_data[i_out],num,den),dtype=np.int32))
+				fp.write(spe_org[i_out].copy(order='C'))
+				fp.close()
+				print('{}: {} created'.format(hps['ext_data'][i_out],nm_pf),flush=True);
+			nm_wav_org='_wav_{}/{}.wav'.format(fe_wav,nms_data[i_nm])
+			nm_eq=nm_org.replace(".wav","_equal.wav");
+			if path.isfile(nm_eq): nm_wav_org=nm_eq
+			wf_org=wave.open(nm_wav_org,'rb'); # load utterance from original speech
+			wf_org.setpos(int(debs*fe_wav)); audio=wf_org.readframes(int(lgs_org*fe_wav)); wf_org.close();
+			# save original utterance
+			wf_org=wave.open(nm_org+'.wav','wb'); wf_org.setparams((1,2,fe_wav,0,'NONE','not compressed'));
+			wf_org.writeframes(audio); wf_org.close();
+			print('ORIGINAL SOUND: {}.wav - {}Hz, {:2f}s created'.format(nm_org,fe_wav,lgs_org),flush=True);
+			if hps['ext_data'][i_out]=='WAVEGLOW' and vocoder is not None:
+				nm_wav=nm_org+'_'+hps['ext_data'][i_out]+'.wav'
+				wf_org=wave.open(nm_wav,'wb'); wf_org.setparams((1,2,fe_wav,0,'NONE','not compressed')); # vocoded speech
+				spe_tgt=spe_org[i_out].transpose(); spe_tgt = to_gpu(torch.FloatTensor(spe_tgt)[None, :])
+				with torch.no_grad():
+					if vocoder.find('waveglow')>=0:
+						audio = MAX_WAV_VALUE * waveglow.infer(spe_tgt, sigma=sigma)[0]
+					elif vocoder.find('hifigan')>=0:
+						audio = MAX_WAV_VALUE * hgan(spe_tgt[0])[0]
+					audio = audio.cpu().numpy().astype('int16')
+					wf_org.writeframes(audio)
+					wf_org.close();
+					print('VOCODED ORIGINAL SOUND by {}: {} created'.format(type_vocoder,nm_wav),flush=True);
 		nm_syn='_syn_{}/{}_{}'.format(hps['dir_data'][i_out],nm_base,suffix)
 		if hps['ext_data'][i_out]=='WAVEGLOW' and vocoder is not None:
 			wf_syn[i_out]=wave.open(nm_syn+'.wav','wb'); wf_syn[i_out].setparams((1,2,fe_wav,0,'NONE','not compressed'));
-			if not silent: print('WAVEGLOW: {}.wav created'.format(nm_syn),flush=True);
+			seg_syn=open(nm_syn+'.seg','w', encoding='utf-8'); print('PTS:PHON|TEXT\nFE: {}\n0 .'.format(fe_wav),file=seg_syn); lg_syn=0;
+			print('WAVEGLOW: {}.wav created'.format(nm_syn),flush=True);
 		out_par[i_out] = np.empty((0,hps['dim_data'][i_out]),dtype=np.float32)
 	if args.prediction==False: # synthesis
 		if '(~:?!§¬«».#;,[])"'.find(hps['symbols'][all_text_in[0]])<0: all_text_in=[c_prec]+all_text_in; lg_in += 1 # prefix first utterance by a chapter onset
@@ -258,9 +298,11 @@ while 1:
 		parts = [0,lg_in]; # un seul bloc
 	c_prec=all_text_in[0]
 	d_syn=np.zeros(nb_out,dtype=int);
-	for ipart_txt in range(len(parts)-1): # splits of text entry
+	nb_parts=len(parts)
+	for ipart_txt in range(nb_parts-1): # splits of text entry
 		all_text_in[parts[ipart_txt]]=c_prec; c_prec=all_text_in[parts[ipart_txt+1]-1]; # text split prefixed by last character (punctuation) of previous split
 		text_in=all_text_in[parts[ipart_txt]:parts[ipart_txt+1]]; lg_in=len(text_in); tensor_text_in=torch.Tensor(text_in)[None, :]; tensor_text_in=to_gpu(tensor_text_in).long();
+		s = time.process_time()
 		if prediction==False:
 			(part_spe_out, part_spe_out_postnet, part_gate_out, pho_out, dur_out, style, part_alignement, part_embeddings) = model.inference((tensor_text_in,tensor_spk_in,tensor_style_in), hps['seed'])
 		else:
@@ -270,8 +312,10 @@ while 1:
 			(part_spe_out, part_spe_out_postnet, part_gate_out, pho_out, dur_out, style, part_alignement, part_embeddings) = model.forward((tensor_text_in, [lg_in], tensor_spk_in, tensor_style_in, tensor_out, lg_out, [lg_in]))
 			for i_out in range(nb_out):
 				if len(part_alignement[i_out]): part_alignement[i_out]=part_alignement[i_out].transpose(0,1)
+		dt_tc2 += time.process_time()-s
+		
 		ch_in=[hps['symbols'][p] for p in text_in]
-		if not silent: print('synthesis of chunk {:d} [{:d}-{:d},{:d}]: {}'.format(ipart_txt,spk_in,style_in,lg_in,'|'.join(ch_in)),flush=True)
+		print('synthesis of chunk {:d}/{:d} [{:d}-{:d},{:d}]: {}'.format(ipart_txt,nb_parts-1,spk_in,style_in,lg_in,'|'.join(ch_in)),flush=True)
 		if len(pho_out)>0:
 			pb=torch.sigmoid(pho_out[0,:,:].cpu()).data.numpy()
 #			pb=pb/sum(pb)
@@ -282,6 +326,8 @@ while 1:
 			ind=pho_out[0,:,:].argmax(axis=0).cpu().data.numpy()
 			ph_prd='|'.join(["{}".format(hps['out_symbols'][p]) for p in ind]) #predicted aligned phonetic chain
 			print('PH_PRD: {}'.format(ph_prd))
+		if lg_embeddings:
+			f_embeddings.write(part_embeddings.copy(order='C'))
 # production d'alignement
 		if 0:
 			ind_aln = np.append(ind,1); ch_in_aln=ch_in+['x']
@@ -314,7 +360,7 @@ while 1:
 								
 		if len(dur_out[0,:]):
 			ch_dprd=' '.join(["{}".format(int(d)) for d in 100*dur_out[0,:].cpu().detach().numpy()[0,:]])
-			if not silent: print('prd_dur: {}'.format(ch_dprd))
+			print('prd_dur: {}'.format(ch_dprd))
 		for i_out in range(nb_out):
 			lg_part_out=part_spe_out[i_out].shape[2]
 			if i_out>0:
@@ -324,7 +370,7 @@ while 1:
 					part_spe_out[i_out]=part_spe_out[i_out][:,:,0:lg_part_ref-1];
 					lg_part_out=lg_part_ref
 			d_syn[i_out]+=lg_part_out
-			if not silent: print('{}: {}, {}->{:.2f}\n'.format(i_out, d_syn[i_out], lg_part_out,d_syn[i_out]/hps['fe_data'][i_out]))
+			print('{}: {}, {}->{:.2f}\n'.format(i_out, d_syn[i_out], lg_part_out,d_syn[i_out]/hps['fe_data'][i_out]))
 			if len(part_alignement[i_out]):
 				part_aln = part_alignement[i_out].cpu().data.numpy()[0]
 				part_gate = torch.sigmoid(part_gate_out[i_out].cpu()).data.numpy()[0,:]
@@ -334,26 +380,38 @@ while 1:
 			part_out=part_spe_out_postnet[i_out].cpu().data.numpy()
 			part_out=part_out[0,:,:].transpose()
 			
-			if not silent: print('prd_{}: {:.2f}s'.format(hps['ext_data'][i_out],lg_part_out/hps['fe_data'][i_out]));
+			print('prd_{}: {:.2f}s'.format(hps['ext_data'][i_out],lg_part_out/hps['fe_data'][i_out]));
 			
-			if ipart_txt: # insert silence 300ms
-				nt=int(0.3*hps['fe_data'][i_out])
-				d_syn[i_out]+=nt
-				if wf_syn[i_out]:
-					ne=int(nt*fe_wav/hps['fe_data'][i_out]);
-					wf_syn[i_out].writeframes(np.zeros(ne,dtype='int16'));
-				out_par[i_out]=np.concatenate((out_par[i_out],np.tile(part_out[0,:],(nt,1))))
 			if wf_syn[i_out]:
+				s = time.process_time()
 				with torch.no_grad():
 					if vocoder.find('waveglow')>=0:
 						audio = MAX_WAV_VALUE * waveglow.infer(part_spe_out_postnet[i_out], sigma=sigma)[0]
 					elif vocoder.find('hifigan')>=0:
 						audio = MAX_WAV_VALUE * hgan(part_spe_out_postnet[i_out][0])[0]
-				audio = audio.cpu().numpy().astype('int16');
+				dt_VOC += time.process_time()-s
+				audio = audio.cpu().numpy().astype('int16'); lg_audio=len(audio); dt_S+=lg_audio/fe_wav
 				wf_syn[i_out].writeframes(audio)
 				if play_wav: sd.play(audio,fe_wav)
-
+				print('{} __\n{} .|{}\n{} utt\n{} .'.format(lg_syn+int(hps['lgs_sil_sides']*fe_wav/2),lg_syn+int(hps['lgs_sil_sides']*fe_wav),''.join(ch_in),lg_syn+int(lg_audio/2),lg_syn+lg_audio-int(hps['lgs_sil_sides']*fe_wav)),file=seg_syn); lg_syn+=lg_audio;
 			out_par[i_out]=np.concatenate((out_par[i_out],part_out))
+
+			if ipart_txt<nb_parts-2: # insert silence		
+				dsil_ms=hps['long_pause'] if text_in[-1]==code_PAR else hps['short_pause'] # longer silence and the end of paragraphs
+				print('Insert silence {:.2f}s'.format(dsil_ms))
+				nt=int(dsil_ms*hps['fe_data'][i_out])
+				d_syn[i_out]+=nt
+				if wf_syn[i_out]:
+					ne=int(nt*fe_wav/hps['fe_data'][i_out]);
+					nm_sil='sil_{}_{}.wav'.format(hps['speakers'][spk_in],fe_wav)
+					if os.path.exists(nm_sil):
+						fsil=wave.open(nm_sil); fmt ="%ih" % ne; wav_sil=np.array(struct.unpack(fmt,fsil.readframes(ne)),dtype='int16'); fsil.close()
+						wf_syn[i_out].writeframes(wav_sil)
+					else:
+						wf_syn[i_out].writeframes(np.zeros(ne,dtype='int16'));
+					lg_syn+=ne;
+				out_par[i_out]=np.concatenate((out_par[i_out],np.tile(part_out[0,:],(nt,1))))
+
 
 			# ----------- Display Attention alignments of each chunk ----------------
 			if (args.draw) :
@@ -399,10 +457,14 @@ while 1:
 					out_par[i_out]=np.concatenate((out_par[i_out],np.tile(out_par[i_out][-1,:],(nt,1))))
 					if wf_syn[i_out]:
 						ne=int(nt*fe_wav/hps['fe_data'][i_out]);
-						wf_syn[i_out].writeframes(np.zeros(ne,dtype='int16'));
+						wf_syn[i_out].writeframes(np.zeros(ne,dtype='int16')); lg_syn+=ne;
+	if len(data_test[i_syn])>=7:
+		ph_tgt='|'.join(["{}".format(hps['out_symbols'][p]) for p in data_test[i_syn][7]]) #target phonetic chain
+		print('PH_TGT: {}'.format(ph_tgt))
+	if data_test[i_syn][2]: print('{}: dur_org={:.3f}s'.format(nm_base,data_test[i_syn][2]-hps['lgs_sil_add']))
 	for i_out in range(nb_out):
-		if not silent: print('dur_syn[{}]={:.3f}s'.format(i_out,d_syn[i_out]/hps['fe_data'][i_out]))
-		if wf_syn[i_out]: wf_syn[i_out].close();
+		print('dur_syn[{}]={:.3f}s'.format(i_out,d_syn[i_out]/hps['fe_data'][i_out]))
+		if wf_syn[i_out]: wf_syn[i_out].close(); print('{} __\n{} .'.format(lg_syn-int(hps['lgs_sil_sides']*fe_wav/2),lg_syn),file=seg_syn); seg_syn.close();
 		if gen_pf:
 			nm_syn='_syn_{}/{}_{}'.format(hps['dir_data'][i_out],nm_base,suffix)
 			fp=open(nm_syn+'.'+hps['ext_data'][i_out],'wb')
@@ -414,3 +476,9 @@ while 1:
 			fp.write(out_par[i_out].copy(order='C'))
 			fp.close()
 			print('{}.{} created [{}, {:d}ms]'.format(nm_syn,hps['ext_data'][i_out],out_par[i_out].shape,int(1000.0*out_par[i_out].shape[0]/hps['fe_data'][i_out])), flush=True)
+if save_embeddings:
+  if lg_embeddings: f_embeddings.close()
+  input_embeddings = getattr(model,'embedding').weight.cpu().detach().numpy()
+  speaker_embeddings = getattr(model,'speaker_embedding').weight.cpu().detach().numpy()
+  scipy.io.savemat('EMB_'+nm_tacotron2+'.mat', mdict={'speaker_embeddings': speaker_embeddings, 'symbol_embeddings': input_embeddings, 'speakers': hps['speakers'], 'symbols':  hps['symbols']})
+print('RTF(Tc2)={:.2f} RTF({})={:.2f}'.format(dt_tc2/dt_S,type_vocoder,dt_VOC/dt_S));

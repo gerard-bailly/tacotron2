@@ -35,12 +35,14 @@ fe_wav=16000; f0_moy=150; n=55; ind=list(range(18))+[36,37];
 lpcnet_demo="~/Documents/LPCNet-master/lpcnet_demo"
 lpcnet_demo="/research/crissp//LPCNet-master/lpcnet_demo"
 
-myfiles = glob.glob("_wav_22050/GD*_EG_*.wav")
+myfiles = glob.glob("_wav_22050/BILDTS_JdG_001_*.wav")
 for nm_wav in myfiles:
-  fs, wav = wavfile.read(nm_wav)
-  lg_wav_s=len(wav)/fs; mx_wav=max(abs(wav))
-  nm=re.search('([^\/]+?)\.wav',nm_wav).group(1)
-  print("{}: {}Hz {}s max={}".format(nm,fs,lg_wav_s,mx_wav))
+	nm_eq=nm_wav.replace(".wav","_equal.wav")
+	nmf=nm_eq if path.isfile(nm_eq) else nm_wav
+	fs, wav = wavfile.read(nmf)
+	lg_wav_s=len(wav)/fs; mx_wav=max(abs(wav))
+	nm=re.search('([^\/]+?)\.wav',nm_wav).group(1)
+	print("{} - {}: {}Hz {}s max={}".format(nmf,nm,fs,lg_wav_s,mx_wav))
   #~ # Analyse WAVERNN
   #~ nm_WAVERNN = "_WAVERNN/"+nm+".WAVERNN"
   #~ if not path.exists(nm_WAVERNN):
@@ -86,21 +88,20 @@ for nm_wav in myfiles:
   #~ Hz=nbt/lg_wav_s
   #~ print('LPCNet {} {:.2f}Hz'.format(header,Hz),flush=True)
   # Analyse WAVEGLOW
-  nm_WAVEGLOW = "_WAVEGLOW/"+nm+".WAVEGLOW"
-  if not path.exists(nm_WAVEGLOW):
-    wav=wav/mx_wav
-    mel=librosa.feature.melspectrogram(y=np.float32(wav), sr=fs, power=1,
-            win_length=prm_WAVEGLOW.get('win_length'), hop_length=prm_WAVEGLOW.get('hop_length'), fmin=prm_WAVEGLOW.get('fmin'), fmax=prm_WAVEGLOW.get('fmax'), n_mels=prm_WAVEGLOW.get('n_mel_channels'))
-    mel=np.log(mel.clip(1e-5)/10.0).transpose()+1.23
-    header=mel.shape+(fs,prm_WAVEGLOW.get('hop_length')); nbt=header[0]
-    fp=open(nm_WAVEGLOW,'wb')
-    fp.write(np.asarray(header,dtype=np.int32))
-    fp.write(mel.copy(order='C'))
-    fp.close();
-  else:
-    header = tuple(np.fromfile(nm_WAVEGLOW, count=4, dtype=np.int32)); nbt=header[0]
-  Hz=nbt/lg_wav_s
-  print('WAVEGLOW {} {:.2f}Hz'.format(header,Hz),flush=True)
+	nm_WAVEGLOW = "_WAVEGLOW/"+nm+".WAVEGLOW"
+	if not path.exists(nm_WAVEGLOW):
+		wav=wav/mx_wav
+		mel=librosa.feature.melspectrogram(y=np.float32(wav), sr=fs, power=1, win_length=prm_WAVEGLOW.get('win_length'), hop_length=prm_WAVEGLOW.get('hop_length'), fmin=prm_WAVEGLOW.get('fmin'), fmax=prm_WAVEGLOW.get('fmax'), n_mels=prm_WAVEGLOW.get('n_mel_channels'))
+		mel=np.log(mel.clip(1e-5)/10.0).transpose()+1.23
+		header=mel.shape+(fs,prm_WAVEGLOW.get('hop_length')); nbt=header[0]
+		fp=open(nm_WAVEGLOW,'wb')
+		fp.write(np.asarray(header,dtype=np.int32))
+		fp.write(mel.copy(order='C'))
+		fp.close();
+	else:
+		header = tuple(np.fromfile(nm_WAVEGLOW, count=4, dtype=np.int32)); nbt=header[0]
+	Hz=nbt/lg_wav_s
+	print('WAVEGLOW {} {:.2f}Hz'.format(header,Hz),flush=True)
 
 #    for i in range(n_mel_channels):
 #      a = mel[i,:]

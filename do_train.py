@@ -17,9 +17,10 @@ from def_symbols import init_symbols, text_to_sequence
 from model import Tacotron2, get_mask_from_lengths
 import pdb
 import yaml
+import gc
+
 _symbol_to_id, _id_to_symbol, symbols, out_symbols, _out_symbol_to_id = [], [], [], [], []
 
-import gc
 torch.autograd.set_detect_anomaly(True)
 
 nnBCE=nn.BCEWithLogitsLoss()
@@ -44,6 +45,7 @@ hps = []
 nms_data=[]
 (CSV_num_fic, CSV_start_spe, CSV_lg_spe, CSV_txt_in, CSV_lg_in, CSV_spk_in, CSV_style_in, CSV_pho_out, CSV_dur_out) = range(9)
 (BATCH_text_in, BATCH_lg_in, BATCH_spk_in, BATCH_style_in, BATCH_spe_tgt, BATCH_gate_tgt, BATCH_lg_tgt, BATCH_pho_tgt, BATCH_dur_tgt, BATCH_lg_pho_out, BATCH_i_nm)=range(11)
+stateful=False
 
 def check_tensors():
     for obj in gc.get_objects():
@@ -55,8 +57,7 @@ def check_tensors():
 
 class OrderedSampler(Sampler):
 
-    def __init__(self, model, train_data, batch_size, drop_last=True):
-        self.model = model
+    def __init__(self, train_data, batch_size, drop_last=True):
         self.train_data = train_data
         self.batch_size = batch_size
         self.nb_utts = len(data_train)
@@ -66,7 +67,7 @@ class OrderedSampler(Sampler):
         lst=np.arange(self.nb_utts)
         while len(lst)>=self.batch_size:
             i_first=np.random.randint(len(lst))
-            ind=np.argsort(abs(lst-lst[i_first])) # GB (9/12/2021) i_first -> lst(i_first)
+            ind=np.argsort(abs(lst-lst[i_first]))
             batch=lst[ind[0:self.batch_size]];
             lst=np.delete(lst,ind[0:self.batch_size])
 #            dm=np.mean([e[CSV_lg_spe] for i,e in enumerate(np.array(self.train_data,dtype=object)[batch])]); print('dm={:.2f}s'.format(dm));
@@ -80,18 +81,22 @@ class OrderedSampler(Sampler):
         
 class BatchSampler(Sampler):
 
-    def __init__(self, sampler, batch_size, drop_last=True):
-        self.sampler = sampler
+    def __init__(self, train_data, batch_size, drop_last=True):
+        self.train_data = train_data
         self.batch_size = batch_size
+        self.nb_utts = len(data_train)
         self.drop_last = drop_last
+        self.nb_batch = self.nb_utts//self.batch_size
+        self.nb_last = self.nb_utts-self.nb_batch*self.batch_size
 
     def __iter__(self):
         batch = []
-        for _, idx in enumerate(iter(self.sampler)):
-            batch = idx
+        for idx in range(0,self.nb_batch) :
+            batch = np.arange(idx,self.nb_utts-self.nb_last,self.nb_batch)
             yield batch
         if len(batch) > 0 and not self.drop_last:
-           yield batch
+        	batch = np.arange(self.nb_batch*self.batch_size,self.nb_utts)
+        	yield batch
 
     def __len__(self):
         return len(self.sampler) // self.batch_size
@@ -110,7 +115,7 @@ def collate_batch(batch):
   def takeLen_in(elem):
     return elem[CSV_lg_in]
     
-  batch.sort(key=takeLen_in,reverse = True)
+  if not stateful: batch.sort(key=takeLen_in,reverse = True)
   lg_batch = len(batch)
   nm=lg_batch*[None]
   dim_data=hps['dim_data']; nb_out=len(dim_data)
@@ -155,7 +160,7 @@ def collate_batch(batch):
     if hps['compute_durations'] and batch[i_batch][CSV_dur_out]: dur_tgt[i_batch,:lg_txt] = torch.Tensor(batch[i_batch][CSV_dur_out])
     if not silent:
       ch=''.join([hps['symbols'][p] for p in batch[i_batch][CSV_txt_in]]).replace('@','')
-      print('BATCH{}: {}: {} -> {} {}'.format(i_batch,nms_data[batch[i_batch][CSV_num_fic]],len(batch[i_batch][CSV_txt_in]),lg_tgt[i_batch],ch))
+      print('BATCH{} [{}, {}:{}]: {} -> {} {}'.format(i_batch,nms_data[batch[i_batch][CSV_num_fic]],batch[i_batch][CSV_spk_in],hps['speakers'][batch[i_batch][CSV_spk_in]],len(batch[i_batch][CSV_txt_in]),lg_tgt[i_batch],ch))
   i_nm = [[item[CSV_num_fic],item[CSV_start_spe]] for item in batch] #fileid, starting_frame
   return [text_in, lg_in, spk_in, style_in, spe_tgt, gate_tgt, lg_tgt, pho_tgt, dur_tgt, lg_pho_out, i_nm] # spe_tgt used for teacher forcing
 
@@ -169,18 +174,18 @@ def warm_start_model(nm_mod, model, ignore_layers):
       lst={};
       for k, v in model_dict.items():
         if k.find('gst.encoder.convs')>=0:
-          p=re.compile('gst.encoder.convs.(\d+)'); k=p.sub(r'style_encoder.convolutions.\1.0.conv',k); lst[k]=v; print(k,list(v.shape))
+          p=re.compile(r'gst\.encoder\.convs\.(\d+)'); k=p.sub(r'style_encoder.convolutions.\1.0.conv',k); lst[k]=v; print(k,list(v.shape))
         if k.find('gst.encoder.bns')>=0:
-          p=re.compile('gst.encoder.bns.(\d+)'); k=p.sub(r'style_encoder.convolutions.\1.1',k); lst[k]=v; print(k,list(v.shape))
+          p=re.compile(r'gst\.encoder\.bns.(\d+)'); k=p.sub(r'style_encoder.convolutions.\1.1',k); lst[k]=v; print(k,list(v.shape))
       dummy_dict = model.state_dict(); dummy_dict.update(lst); model_dict = dummy_dict
       model.load_state_dict(model_dict,strict=False)
 
     checkpoint_dict = torch.load(nm_mod, map_location='cpu')
     model_dict = checkpoint_dict['state_dict']
     for key in list(model_dict.keys()):
-        if re.search('decoderVisual',key): model_dict[key.replace('decoderVisual','decoder.1')] = model_dict.pop(key)
-        if re.search('decoder\.[^\d]',key): model_dict[key.replace('decoder','decoder.0')] = model_dict.pop(key)
-        if re.search('postnet\.[^\d]',key): model_dict[key.replace('postnet','postnet.0')] = model_dict.pop(key)
+        if re.search(r'decoderVisual',key): model_dict[key.replace('decoderVisual','decoder.1')] = model_dict.pop(key)
+        if re.search(r'decoder\.[^\d]',key): model_dict[key.replace('decoder','decoder.0')] = model_dict.pop(key)
+        if re.search(r'postnet\.[^\d]',key): model_dict[key.replace('postnet','postnet.0')] = model_dict.pop(key)
     print('List of the checkpoint''s modules');
     
     phonetize=model_dict.get('phonetize.linear_layer.weight') #change of number of phonetic embeddings
@@ -199,7 +204,7 @@ def warm_start_model(nm_mod, model, ignore_layers):
     if speaker_embeddings!=None:
       nb_spk=speaker_embeddings.shape[0]
       if nb_spk<hps['nb_speakers']:
-        speaker_embeddings=torch.cat((speaker_embeddings,speaker_embeddings[0,:].repeat(hps['nb_speakers']-nb_spk,1)))
+        speaker_embeddings=torch.cat((speaker_embeddings,speaker_embeddings[id_new_speaker,:].repeat(hps['nb_speakers']-nb_spk,1)))
         model_dict.update({('speaker_embedding.weight',speaker_embeddings)})
         print('{} speakers added'.format(hps['nb_speakers']-nb_spk))
 
@@ -208,6 +213,17 @@ def warm_start_model(nm_mod, model, ignore_layers):
       car_embeddings=torch.cat((car_embeddings,car_embeddings[0,:].repeat(len(hps['symbols'])-nb_car,1)))
       model_dict.update({('embedding.weight', car_embeddings)})
       print('{} symbols added: {}'.format(len(hps['symbols'])-nb_car, [hps['symbols'][p] for p in range(nb_car,len(hps['symbols']))]))
+
+    if (nb_car>len(hps['symbols'])): # extra characters should be deleted
+      car_embeddings=car_embeddings[0:len(hps['symbols']),:]
+      model_dict.update({('embedding.weight', car_embeddings)})
+      print('{} symbols deleted: {}'.format(len(hps['symbols'])-nb_car, [hps['symbols'][p] for p in range(nb_car,len(hps['symbols']))]))
+      nm='phonetize.linear_layer.weight'
+      dim=model_dict.get(nm).shape[0]
+      nb=len(hps['out_symbols'])
+      if (dim>nb):
+          weights=model_dict.get('phonetize.linear_layer.weight'); weights=weights[0:nb,:]; model_dict.update({('phonetize.linear_layer.weight', weights)})
+          bias=model_dict.get('phonetize.linear_layer.bias'); bias=bias[0:nb]; model_dict.update({('phonetize.linear_layer.bias', bias)})
 
     for i_out in range(len(hps['dim_data'])): #change of number of output parameters
       nm='decoder.%d.decoder_rnn.weight_hh'%i_out
@@ -405,7 +421,7 @@ def process(model, is_train, device, loader, optimizer, epoch, by_utt=False, nt=
 #				loss += loss_dur
 		for i_b in range(lg_batch):
 			l_org=batch[BATCH_lg_in][i_b]; ch='|'.join([hps['symbols'][p] for p in batch[BATCH_text_in][i_b][0:l_org]])
-			pstyle=style[i_b].cpu().detach().numpy();
+			style_utt=style[i_b,:].cpu().detach().numpy() if style.nelement() else np.empty(0)
 			if by_utt:
 			  print('{} [LOC={}] '.format(nms_data[batch[BATCH_i_nm][i_b][0]],batch[BATCH_spk_in][i_b]),end='')
 			  if batch[BATCH_lg_tgt].any():
@@ -413,7 +429,7 @@ def process(model, is_train, device, loader, optimizer, epoch, by_utt=False, nt=
 			    if max(lg[i_b,:])==0 and max(batch[BATCH_lg_tgt][i_b])>0: print('Pb EoS')
 			  print('"{}" -> {}'.format(ch,lg[i_b,:]),end='');
 			  print(', LOSS={:.3}'.format(g_loss_per_utt[i_b]),end='')
-			  print(', STYLE={}'.format(pstyle),end='')
+			  if len(style_utt): print(', STYLE={}'.format(style_utt),end='')
 			  if pho_ok and batch[BATCH_lg_pho_out][i_b]:
 			    ph_tgt='|'.join(["{}".format(hps['out_symbols'][p]) for p in pho_tgt[i_b,:l_org]])
 			    ind=pho_out[i_b,:,:l_org].argmax(axis=0)
@@ -429,9 +445,11 @@ def process(model, is_train, device, loader, optimizer, epoch, by_utt=False, nt=
 			  print('');
 		if is_train:
 			if torch.isnan(loss): print("Pb Loss")
-			loss.backward()
-			optimizer.step()
-			loss = loss.cpu().detach().item()
+			if loss.item()<1000.0:
+				loss.backward(); optimizer.step()
+				loss = loss.cpu().detach().item()
+			else:
+				loss = 1000.0
 			loss_spe_postnet = loss_spe_postnet.cpu().detach().numpy()
 			loss_spe = loss_spe.cpu().detach().numpy()
 			loss_gate = loss_gate.cpu().detach().numpy()
@@ -460,6 +478,9 @@ parser.add_argument('--phonetic_only', action='store_true', default=False, help=
 parser.add_argument('--num_gpu', required=False, type=int, default='0', help='number of the gpu')
 parser.add_argument('--config', required=False, type=str, default="tc2.yaml", help='configuration file')
 parser.add_argument('--model_name', required=False, type=str, default="tacotron2", help='name of the saved model')
+parser.add_argument('--id_new_speaker', required=False, type=int, default='0', help='id of the embeddings of the speaker to copy from')
+parser.add_argument('--stateful', action='store_true', default=False, help='save state of encoder lstm for chaining utterances')
+parser.add_argument('--save_embeddings', type=str, required=False, default='', help='Save ouput embeddings of text-encoder in .mat file')
 args = parser.parse_args();
 hps = yaml.load(open(args.config, "r"), Loader=yaml.FullLoader)
 hparams = args.hparams;
@@ -474,6 +495,10 @@ pre_trained = args.pre_trained
 phonetic_only = args.phonetic_only
 pb_min_gate = torch.tensor(hps['gate_threshold']); pb_min_gate=torch.log(pb_min_gate/(1-pb_min_gate))
 model_name = args.model_name
+id_new_speaker = args.id_new_speaker
+hps['stateful'] = stateful = args.stateful
+hps['save_embeddings'] = save_embeddings = args.save_embeddings
+hps['code_PAR'] = text_to_sequence(hps,'§')[0]
 
 num_gpu=min(num_gpu,torch.cuda.device_count()-1)
 device = torch.device("cuda:%d" % (num_gpu) if torch.cuda.is_available() else "cpu")
@@ -495,8 +520,12 @@ check_gpu("AFTER LOADING MODEL")
 (data_test, nms_data)=load_csv(hps['nm_csv_test'], hps, utts=[], nms_data=[])
 test_loader = torch.utils.data.DataLoader(data_test, batch_size=hps['batch_size'], drop_last=False, shuffle=False, collate_fn=collate_batch, num_workers=0)
 if hps['nb_epochs']:
-  (data_train, nms_data)=load_csv(hps['nm_csv_train'], hps, utts=[], nms_data=nms_data)
-  sampler_train = OrderedSampler(model, data_train, hps['batch_size'], drop_last=False);
+  if stateful:
+  	(data_train, nms_data)=load_csv(hps['nm_csv_train'], hps, utts=[], nms_data=nms_data, sort_utt=False)
+  	sampler_train = BatchSampler(data_train, hps['batch_size'], drop_last=False);
+  else:
+  	(data_train, nms_data)=load_csv(hps['nm_csv_train'], hps, utts=[], nms_data=nms_data)
+  	sampler_train = OrderedSampler(data_train, hps['batch_size'], drop_last=False);
   train_loader = torch.utils.data.DataLoader(data_train, batch_sampler=sampler_train, collate_fn=collate_batch, num_workers=0)
   optimizer = torch.optim.Adam([param for param in model.parameters() if param.requires_grad == True], lr=hps['learning_rate'], weight_decay=hps['weight_decay'])
   scheduler = optim.lr_scheduler.MultiStepLR(optimizer, milestones=hps['milestones'], last_epoch=-1, gamma=hps['gamma'])
@@ -505,8 +534,6 @@ if hps['nb_epochs']:
     #training
     (nt, _) = process(model, True, device, train_loader, optimizer, i_epoch)
     nb_training_iter += nt
-    #validation
-    #process(model, False, device, test_loader, [], i_epoch)
     nm_mod = path.join(args.output_directory, "{}_{}_{}".format(model_name,'_'.join(hps['ext_data']),i_epoch))
     save_checkpoint(model, optimizer, hps['learning_rate'], nb_training_iter, nm_mod)
     scheduler.step()
@@ -536,3 +563,9 @@ ind=np.argsort(T_Perf_by_file)
 print('Mean performance')
 for i_nms in ind:
   print('{}: {:.2f}'.format(nms_data[i_nms],T_Perf_by_file[i_nms]))
+if save_embeddings:
+  if lg_embeddings: f_embeddings.close()
+  input_embeddings = getattr(model,'embedding').weight.cpu().detach().numpy()
+  speaker_embeddings = getattr(model,'speaker_embedding').weight.cpu().detach().numpy()
+  scipy.io.savemat('EMB_'+nm_tacotron2+'.mat', mdict={'speaker_embeddings': speaker_embeddings, 'symbol_embeddings': input_embeddings, 'speakers': hps['speakers'], 'symbols':  hps['symbols']})
+
